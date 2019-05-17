@@ -5,8 +5,15 @@
 import 'intersection-observer'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import TilecloudMap from './lib/tilecloud-map'
+import {
+  MapBeforeLoad,
+  MapAfterLoad,
+  mapRenderingQueue,
+} from './lib/ex-map-class'
 
+let onceIntersected = false
 window.tilecloud = {}
+window.tilecloud.Map = MapBeforeLoad
 
 const observer = new IntersectionObserver(entries => {
   entries.forEach(item => {
@@ -14,13 +21,25 @@ const observer = new IntersectionObserver(entries => {
       return
     }
 
-    import(/* webpackChunkName: "mapboxgl" */ 'mapbox-gl/dist/mapbox-gl.js')
-      .then(mapboxgl => {
-        const Map = TilecloudMap(mapboxgl)
-        new Map(item.target)
+    import('mapbox-gl/dist/mapbox-gl.js').then(mapboxgl => {
+      const MbglMap = TilecloudMap(mapboxgl)
+      new MbglMap(item.target)
+
+      if (!onceIntersected) {
+        onceIntersected = true
         window.mapboxgl = mapboxgl
-        window.tilecloud.Map = Map
-      })
+        window.tilecloud.Map = MapAfterLoad(MbglMap)
+
+        while (mapRenderingQueue.length > 0) {
+          const { args, resolve, reject } = mapRenderingQueue.pop()
+          try {
+            resolve(new MbglMap(...args))
+          } catch (e) {
+            reject(e)
+          }
+        }
+      }
+    })
 
     observer.unobserve(item.target)
   })
